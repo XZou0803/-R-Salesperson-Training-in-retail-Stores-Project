@@ -1,0 +1,120 @@
+---
+title: "Q2final-model"
+author: "Xin Zou"
+date: "Dec 1, 2017"
+output: word_document
+---
+
+#set work directory
+```{r}
+setwd("~/Downloads")
+View(Q2data1)
+View(Q2data2)
+```
+#Summary Statistics
+#For 2012 yr training model
+```{r}
+print(summary(Q2data1)) #X1 is only the number of the row, it means nothing
+hist(Q2data1$est_income_code) # It is likely a normal distribution
+hist(Q2data1$SA_RateofPay)
+hist(log(Q2data1$SA_RateofPay)) # The log transformed not seems to change to much
+
+Q2data1$return_amount2012=Q2data1$`2012return_amount`
+Q2data2$return_amount2013=Q2data2$`2013return_amount`
+Q2data2$return_amount2012=Q2data2$`2012return_amount`
+table(Q2data1$MallGrade)
+Q2data1$Amall=ifelse(Q2data1$MallGrade=="A",1,0) # We set Mall B as reference
+Q2data1$Cmall=ifelse(Q2data1$MallGrade=="C",1,0)
+Q2data1$Fmall=ifelse(Q2data1$MallGrade=="F",1,0)
+
+
+# For 2013 yr training model
+Q2data2$MajorCompetitorPresent<-as.numeric(Q2data2$MajorCompetitorPresent)
+print(summary(Q2data2))
+hist(Q2data2$est_income_code)
+hist(Q2data2$SA_RateofPay)
+hist(log(Q2data2$SA_RateofPay))
+hist(Q2data1$`2012return_amount`)
+hist(log(1+Q2data1$`2012return_amount`)) #Use the log-transformed
+Q2data2$Amall=ifelse(Q2data2$MallGrade=="A",1,0) # Set Mall B as reference
+Q2data2$Cmall=ifelse(Q2data2$MallGrade=="C",1,0)
+Q2data2$Fmall=ifelse(Q2data2$MallGrade=="F",1,0)
+hist(Q2data1$`2012sales`)
+hist(log(1+Q2data1$`2012sales`)) #Use the log for sales
+Q2data1$sales2012<-log(1+Q2data1$`2012sales`)# We should use the log for sales to get a normal distribution 
+Q2data1$return_amount2012<-log(1+Q2data1$`2012return_amount`)
+Q2data2$return_amount2013<-log(1+Q2data2$`2013return_amount`)
+Q2data2$return_amount2012<-log(1+Q2data2$`2012return_amount`)
+# Run the model
+# Model 2012
+# After tested several models
+Q2model4<-lm(return_amount2012~training2012+sales2012+est_income_code+SA_YearsofService+MallSalesSF+TotalCases+StoreSqFt+MajorCompetitorPresent+homeowner_code+I(SA_YearsofService^2),data = Q2data1)
+print(summary(Q2model4))# We think that the years of service of salesmen will have a curve influence on return amount, so use a quadratic term
+# We also found that whether the employee is full time or part time will have diffrent slopes for the results, so we include the interaction term
+
+Q2model8<-lm(return_amount2012~training2012*SA_AssignmentCategory+sales2012+est_income_code+SA_YearsofService+MallSalesSF+TotalCases+StoreSqFt+MajorCompetitorPresent+homeowner_code+I(SA_YearsofService^2),data = Q2data1)
+print(summary(Q2model8)) # We can see that the training wil help to decrease the return, and Full time employees have more impact on this process
+anova(Q2model4,Q2model8,test="Chisq") #The result shows that model8 is better, because it is significant
+
+# Model 2013
+# After tested several models
+Q2model11<-lm(return_amount2013~training2013+training2013*training2012+MajorCompetitorPresent+SA_AssignmentCategory+TotalCases+I(SA_YearsofService^2)+SA_YearsofService+est_income_code+homeowner_code,data = Q2data2)
+print(summary(Q2model11))
+Q2model12<-lm(return_amount2013~training2013*SA_AssignmentCategory+training2013*training2012+MajorCompetitorPresent+SA_AssignmentCategory+TotalCases+I(SA_YearsofService^2)+SA_YearsofService+est_income_code+homeowner_code,data = Q2data2) # The same with the year 2012, but add the interaction term for Training2012 and Training2013, because whether people took the training last year will influence the slope for the next year.
+print(summary(Q2model12))
+anova(Q2model11,Q2model12,test="Chisq") # It is significant, so we should use model12
+# The results show that the impact of tarining in 2013 is less significant comparing the last year.And still full time have more impact for training and return
+
+
+
+#Check Multicollineary
+library(usdm)
+df=data.frame(Q2data1$est_income_code,Q2data1$SA_YearsofService,Q2data1$MallSalesSF,Q2data1$TotalCases,Q2data1$StoreSqFt,Q2data1$MajorCompetitorPresent,Q2data1$homeowner_code)
+cor(df) # There are no serious correlationship in there variables
+vif(df)  #We found that there are no multicallinearity
+df1=data.frame(Q2data2$training2013,Q2data2$training2012,Q2data2$MajorCompetitorPresent,Q2data2$SA_AssignmentCategory,Q2data2$TotalCases,Q2data2$SA_YearsofService,Q2data2$est_income_code,Q2data2$homeowner_code)
+cor(df1) # There are no serious correlationship in there variables
+vif(df1) #We found that there are no multicallinearity
+
+#Check Hetoroskedasticity
+pred<-predict(Q2model8)
+res1=resid(Q2model8)
+plot(pred,res1,ylab="Residuals",xlab="Fitted values") #We saw a pattern
+library(lmtest)
+gqtest(Q2model8)
+bptest(Q2model8) # The F-statistics of P value is significant,so there is Heteroskedasticity
+library(sandwich)
+library(foreign)
+coeftest(Q2model8,vcov=vcovHC(Q2model8),"HC1" ) #We should use the robust standard error
+# The same with year 2013
+pred<-predict(Q2model12)
+res2=resid(Q2model12)
+plot(pred,res2,ylab="Residuals",xlab="Fitted values")
+library(lmtest)
+gqtest(Q2model12)
+bptest(Q2model12)
+library(sandwich)
+library(foreign)
+coeftest(Q2model12,vcov=vcovHC(Q2model12),"HC1" )
+
+# Interpret the results
+library(effects)
+plot(effect(term="SA_YearsofService",mod=Q2model8))
+plot(effect(term = "training2012:SA_AssignmentCategory",mod = Q2model8,default.levels=2,multiline=TRUE)) #We want to all the lines in one plot
+plot(effect(term = "training2012:SA_AssignmentCategory",mod = Q2model8,xlevels=2),multiline=TRUE) #The result shows that the more training they have, full time salesmen increased the return amount and part time decreased the amount
+
+library(effects)
+plot(effect(term="SA_YearsofService",mod=Q2model12))
+plot(effect(term = "training2013:SA_AssignmentCategory",mod = Q2model12,xlevels=2),multiline=TRUE) # The result shows that training 2013 will lead to both fulltime and partime salesmen increase the retrun amount, but the impact for full time is more serious
+```
+# Check for Endogenity
+# Since training is decided by salesmen, we consider there might be endogenity, and the pressures form their family will push them to take the training.So the SA_MartialStatus and SA_Dependent is the best instruments, because they are correlated with training but have no relation with return amount.
+```{r}
+library(AER)
+library(foreign)
+Q2model15<-ivreg(return_amount2012~training2012*SA_AssignmentCategory+sales2012+est_income_code+SA_YearsofService+MallSalesSF+TotalCases+StoreSqFt+MajorCompetitorPresent+homeowner_code+I(SA_YearsofService^2)|SA_MartialStatus+SA_MartialStatus*SA_AssignmentCategory+SA_Dependent+SA_Dependent*SA_AssignmentCategory+sales2012+est_income_code+SA_YearsofService+MallSalesSF+TotalCases+StoreSqFt+MajorCompetitorPresent+homeowner_code+I(SA_YearsofService^2),data = Q2data1)
+summary(Q2model15,diagnostics=TRUE)
+Q2model116<-ivreg(return_amount2013~training2013*SA_AssignmentCategory+training2013*training2012+MajorCompetitorPresent+SA_AssignmentCategory+TotalCases+I(SA_YearsofService^2)+SA_YearsofService+est_income_code+homeowner_code|SA_MartialStatus+SA_MartialStatus*SA_AssignmentCategory+SA_MartialStatus*training2012+MajorCompetitorPresent+SA_AssignmentCategory+TotalCases+I(SA_YearsofService^2)+SA_YearsofService+est_income_code+homeowner_code,data = Q2data2)
+summary(Q2model16,diagnostics=TRUE)
+# From the results, the instruments did not pass the first stage test, it means the instruments can not justify regerence assumption. So they are not good. Do not apply endogenity.
+```
